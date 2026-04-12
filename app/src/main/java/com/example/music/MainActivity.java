@@ -33,6 +33,7 @@ import com.karumi.dexter.listener.single.PermissionListener;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 
 public class MainActivity extends AppCompatActivity {
     ListView listView;
@@ -72,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
 //                        Toast toast = Toast.makeText(getApplicationContext(), "Permission Granted", Toast.LENGTH_SHORT);
 //                        toast.show();
                         ArrayList<File> mySongs = findSong(Environment.getExternalStorageDirectory());
+                        Collections.sort(mySongs, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
                         String [] items = new String[mySongs.size()];
                         for(int i=0;i<mySongs.size();i++){
                             items[i]=mySongs.get(i).getName().replace(".mp3","");

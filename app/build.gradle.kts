@@ -42,4 +42,7 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     implementation("com.karumi:dexter:6.2.3")
     implementation("com.android.volley:volley:1.2.1")
+    implementation(libs.media)
+    implementation ("com.airbnb.android:lottie:6.7.1" )
+
 }

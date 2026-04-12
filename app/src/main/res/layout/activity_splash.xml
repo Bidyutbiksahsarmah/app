@@ -18,16 +18,16 @@
         app:layout_constraintVertical_bias="0.307"
         app:srcCompat="@drawable/imgbin_60849d68e17772fc2f1e01aad717b888" />
 
-    <TextView
-        android:id="@+id/textView3"
-        android:layout_width="99dp"
-        android:layout_height="41dp"
-        android:layout_marginTop="128dp"
-        android:text="MUSIC"
-        android:textColor="@color/white"
-        android:textSize="25sp"
-        android:textStyle="italic"
+    <com.airbnb.lottie.LottieAnimationView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/imageView2" />
+        app:layout_constraintTop_toBottomOf="@+id/imageView2"
+        app:layout_constraintVertical_bias="0.331"
+        app:lottie_rawRes="@raw/untitledfile"
+        app:lottie_colorFilter="@color/white"
+        app:lottie_renderMode="hardware"
+        app:lottie_loop="true"
+        app:lottie_autoPlay="true"/>
 </androidx.constraintlayout.widget.ConstraintLayout>

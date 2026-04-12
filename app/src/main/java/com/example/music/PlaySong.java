@@ -1,11 +1,14 @@
 package com.example.music;
 
+import android.content.ComponentName;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.RemoteException;
+import android.support.v4.media.MediaBrowserCompat;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaControllerCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -16,23 +19,21 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import java.io.File;
-import java.util.ArrayList;
-
 public class PlaySong extends AppCompatActivity {
     TextView textView;
     ImageView play, previous, next;
-    ArrayList<File> songs;
-    MediaPlayer mediaPlayer;
-    String textContent;
-    int position;
     SeekBar seekBar;
-    Thread updateSeek;
-    private SharedPreferences sharedPreferences;
-    private SharedPreferences.Editor editor;
-    Handler handler;
-    Runnable runnable;
-
+    
+    private MediaBrowserCompat mediaBrowser;
+    private MediaControllerCompat mediaController;
+    private Handler handler = new Handler();
+    private Runnable updateProgressAction = new Runnable() {
+        @Override
+        public void run() {
+            updateProgress();
+            handler.postDelayed(this, 1000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,205 +45,126 @@ public class PlaySong extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
+
         textView = findViewById(R.id.textView2);
         play = findViewById(R.id.play);
         seekBar = findViewById(R.id.seekBar);
         previous = findViewById(R.id.previous);
         next = findViewById(R.id.next);
-        handler = new Handler();
-        runnable = new Runnable() {
-            @Override
-            public void run() {
-                if (mediaPlayer != null) {
-                    seekBar.setProgress(mediaPlayer.getCurrentPosition());
+
+        mediaBrowser = new MediaBrowserCompat(this,
+                new ComponentName(this, MusicService.class),
+                connectionCallbacks,
+                null);
+
+        play.setOnClickListener(v -> {
+            if (mediaController != null) {
+                PlaybackStateCompat state = mediaController.getPlaybackState();
+                if (state != null && state.getState() == PlaybackStateCompat.STATE_PLAYING) {
+                    mediaController.getTransportControls().pause();
+                } else {
+                    mediaController.getTransportControls().play();
                 }
-                handler.postDelayed(this, 100); // update every 0.5 sec
             }
-        };
-        Intent intent = getIntent();
-        Bundle bundle = intent.getExtras();
-        sharedPreferences = getSharedPreferences("MediaPrefs", MODE_PRIVATE);
-        editor = sharedPreferences.edit();
-        songs = (ArrayList) bundle.getParcelableArrayList("songList");
-        textContent = intent.getStringExtra("currentSong");
-        textView.setText(textContent);
-        textView.setSelected(true);
-        if (intent.hasExtra("position")) {
-            position = intent.getIntExtra("position", 0);
-        } else {
-            position = sharedPreferences.getInt("position", 0);
-        }
-        Uri uri = Uri.fromFile(songs.get(position));
-        mediaPlayer = MediaPlayer.create(this, uri);
-        int lastSong = sharedPreferences.getInt("last_song", -1);
-        int savedSeek = sharedPreferences.getInt("seek", 0);
+        });
 
-        if (lastSong == position) {
-            mediaPlayer.seekTo(savedSeek);
-        } else {
-            mediaPlayer.seekTo(0);
-        }
-        mediaPlayer.start();
-        handler.post(runnable);
-        setupCompletionListener();
+        next.setOnClickListener(v -> {
+            if (mediaController != null) mediaController.getTransportControls().skipToNext();
+        });
 
-        seekBar.setMax(mediaPlayer.getDuration());
-
+        previous.setOnClickListener(v -> {
+            if (mediaController != null) mediaController.getTransportControls().skipToPrevious();
+        });
 
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
-            public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser && mediaController != null) {
+                    mediaController.getTransportControls().seekTo(progress);
+                }
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                handler.removeCallbacks(runnable);
-            }
+            public void onStartTrackingTouch(SeekBar seekBar) {}
 
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                mediaPlayer.seekTo(seekBar.getProgress());
-                handler.post(runnable);
-
-            }
-        });
-
-        play.setOnClickListener(v -> {
-            if (mediaPlayer.isPlaying()) {
-                play.setImageResource(R.drawable.play);
-                mediaPlayer.pause();
-                handler.removeCallbacks(runnable);
-            } else {
-                play.setImageResource(R.drawable.pause);
-                mediaPlayer.start();
-                handler.post(runnable);
-            }
-            editor.putInt("position", position);
-            editor.apply();
-        });
-        next.setOnClickListener(v -> {
-            mediaPlayer.stop();
-            mediaPlayer.release();
-
-            if (position != songs.size() - 1) {
-                position++;
-            } else {
-                position = 0;
-            }
-
-            Uri uri1 = Uri.fromFile(songs.get(position));
-            mediaPlayer = MediaPlayer.create(getApplicationContext(), uri1);
-
-            mediaPlayer.seekTo(0);
-            mediaPlayer.start();
-
-            seekBar.setMax(mediaPlayer.getDuration());
-
-            textContent = songs.get(position).getName();
-            textView.setText(textContent);
-
-            editor.putInt("position", position);
-            editor.putInt("seek", 0);
-            editor.putInt("last_song", position);
-            editor.apply();
-
-            setupCompletionListener();
-        });
-        previous.setOnClickListener(v -> {
-            mediaPlayer.stop();
-            mediaPlayer.release();
-
-            if (position != 0) {
-                position--;
-            } else {
-                position = songs.size() - 1;
-            }
-            Uri uri1 = Uri.fromFile(songs.get(position));
-            mediaPlayer = MediaPlayer.create(getApplicationContext(), uri1);
-
-            mediaPlayer.seekTo(0);
-            mediaPlayer.start();
-
-            seekBar.setMax(mediaPlayer.getDuration());
-
-            textContent = songs.get(position).getName();
-            textView.setText(textContent);
-
-            editor.putInt("position", position);
-            editor.putInt("seek", 0);
-            editor.putInt("last_song", position);
-            editor.apply();
-
-            setupCompletionListener();
+            public void onStopTrackingTouch(SeekBar seekBar) {}
         });
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (mediaPlayer != null) {
-            mediaPlayer.stop();
-            mediaPlayer.release();
-            mediaPlayer = null;
-        }
-
-        if (handler != null && runnable != null) {
-            handler.removeCallbacks(runnable);
-        }
-    }
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-            mediaPlayer.start();
-            handler.post(runnable);
-        }
+    protected void onStart() {
+        super.onStart();
+        mediaBrowser.connect();
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        editor.putInt("position", position);
-        editor.putInt("last_song", position);
-        editor.putInt("seek", mediaPlayer.getCurrentPosition());
-        editor.apply();// 🔥 important
-
+    protected void onStop() {
+        super.onStop();
+        if (MediaControllerCompat.getMediaController(PlaySong.this) != null) {
+            MediaControllerCompat.getMediaController(PlaySong.this).unregisterCallback(controllerCallback);
+        }
+        mediaBrowser.disconnect();
+        handler.removeCallbacks(updateProgressAction);
     }
-    private void setupCompletionListener() {
-        mediaPlayer.setOnCompletionListener(mp -> {
 
-            handler.postDelayed(() -> {   // ⏳ 1 second delay
+    private final MediaBrowserCompat.ConnectionCallback connectionCallbacks =
+            new MediaBrowserCompat.ConnectionCallback() {
+                @Override
+                public void onConnected() {
+                    mediaController = new MediaControllerCompat(PlaySong.this, mediaBrowser.getSessionToken());
+                    MediaControllerCompat.setMediaController(PlaySong.this, mediaController);
+                    mediaController.registerCallback(controllerCallback);
 
-                if (position != songs.size() - 1) {
-                    position++;
-                } else {
-                    position = 0;
+                    // If we came from MainActivity with a specific song, play it
+                    Intent intent = getIntent();
+                    if (intent != null && intent.hasExtra("position")) {
+                        int position = intent.getIntExtra("position", 0);
+                        mediaController.getTransportControls().playFromMediaId(String.valueOf(position), null);
+                        intent.removeExtra("position"); // Prevent re-playing when activity is recreated or reconnected
+                    }
+
+                    // Sync initial UI state
+                    updateUI(mediaController.getMetadata());
+                    updatePlaybackState(mediaController.getPlaybackState());
+                }
+            };
+
+    private final MediaControllerCompat.Callback controllerCallback =
+            new MediaControllerCompat.Callback() {
+                @Override
+                public void onMetadataChanged(MediaMetadataCompat metadata) {
+                    updateUI(metadata);
                 }
 
-                mp.release();
+                @Override
+                public void onPlaybackStateChanged(PlaybackStateCompat state) {
+                    updatePlaybackState(state);
+                }
+            };
 
-                Uri uri1 = Uri.fromFile(songs.get(position));
-                mediaPlayer = MediaPlayer.create(getApplicationContext(), uri1);
-
-                mediaPlayer.seekTo(0);
-                mediaPlayer.start();
-
-                seekBar.setMax(mediaPlayer.getDuration());
-
-                textContent = songs.get(position).getName();
-                textView.setText(textContent);
-
-                editor.putInt("position", position);
-                editor.putInt("seek", 0);
-                editor.putInt("last_song", position);
-                editor.apply();
-
-                setupCompletionListener();
-
-            }, 1000); // ⏱ 1000 ms = 1 second
-        });
+    private void updateUI(MediaMetadataCompat metadata) {
+        if (metadata == null) return;
+        textView.setText(metadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE));
+        int duration = (int) metadata.getLong(MediaMetadataCompat.METADATA_KEY_DURATION);
+        seekBar.setMax(duration);
     }
 
+    private void updatePlaybackState(PlaybackStateCompat state) {
+        if (state == null) return;
+        if (state.getState() == PlaybackStateCompat.STATE_PLAYING) {
+            play.setImageResource(R.drawable.pause);
+            handler.post(updateProgressAction);
+        } else {
+            play.setImageResource(R.drawable.play);
+            handler.removeCallbacks(updateProgressAction);
+        }
+    }
+
+    private void updateProgress() {
+        if (mediaController != null && mediaController.getPlaybackState() != null) {
+            long position = mediaController.getPlaybackState().getPosition();
+            seekBar.setProgress((int) position);
+        }
+    }
 }
